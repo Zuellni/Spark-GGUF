@@ -3,7 +3,6 @@ einx
 faster-whisper
 llama-cpp-python
 omegaconf
-onnxruntime-gpu
 rich
 sounddevice
 soundfile
