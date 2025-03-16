@@ -38,8 +38,8 @@ class Codec:
         model = Path(model)
         wav2vec2 = Path(wav2vec2)
         config = OmegaConf.load(model / "config.yaml")
-        hop_length = config["audio_tokenizer"]["mel_params"]["hop_length"]
-        self.sample_rate = config["audio_tokenizer"]["mel_params"]["sample_rate"]
+        hop_length = config.audio_tokenizer.mel_params.hop_length
+        self.sample_rate = config.audio_tokenizer.mel_params.sample_rate
 
         with contextlib.redirect_stdout(None):
             self.model = BiCodec.load_from_checkpoint(model).to(device, dtype)
@@ -143,6 +143,7 @@ class Spark:
             "<|start_global_token|>"
             f"{token_str}"
             "<|end_global_token|>"
+            "<|start_semantic_token|>"
         )
 
         tokens = self.encode(text, special=True)
