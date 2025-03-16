@@ -5,6 +5,7 @@ llama-cpp-python
 omegaconf
 rich
 sounddevice
+soundfile
 torch
 torchaudio
 transformers
