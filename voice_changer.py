@@ -9,7 +9,7 @@ from models import Codec, Spark, Whisper
 from utils import Logger, Timer
 
 
-class Changer:
+class Application:
     @staticmethod
     def devices(kind: Literal["input", "output"]) -> tuple[list[int], str]:
         device_list = []
@@ -24,11 +24,12 @@ class Changer:
 
     def __init__(
         self,
+        audio: str,
         input: int,
         output: int,
-        audio: str,
         codec: str,
         spark: str,
+        wav2vec2: str,
         whisper: str,
         sample_rate: int = 16000,
         block_duration: int = 30,
@@ -37,11 +38,12 @@ class Changer:
         queue_threshold: int = 10,
         sleep: int = 100,
     ) -> None:
+        self.audio = audio
         self.input = input
         self.output = output
-        self.audio = audio
         self.codec = codec
         self.spark = spark
+        self.wav2vec2 = wav2vec2
         self.whisper = whisper
 
         self.sample_rate = sample_rate
@@ -67,7 +69,7 @@ class Changer:
 
     def __call__(self) -> None:
         with Timer("Loaded codec"):
-            codec = Codec(self.codec)
+            codec = Codec(self.codec, self.wav2vec2)
 
         with Timer("Loaded spark"):
             spark = Spark(self.spark)
@@ -76,8 +78,7 @@ class Changer:
             whisper = Whisper(self.whisper)
 
         with Timer("Encoded audio"):
-            audio, audio_tokens = codec.encode(self.audio)
-            codec.warmup(audio)
+            tensor, token_str = codec.encode(self.audio)
 
         Logger.info("Listening")
 
@@ -118,13 +119,13 @@ class Changer:
 
                     with Timer() as timer:
                         try:
-                            tokens = spark(text, audio_tokens)
+                            tokens = spark(text, token_str)
                         except:
                             Logger.error("Generation error")
                             continue
 
                         try:
-                            data = codec.decode(audio, tokens)
+                            data = codec.decode(tensor, tokens)
                         except:
                             Logger.error("Decoding error")
                             continue
@@ -149,25 +150,27 @@ class Changer:
 
 
 if __name__ == "__main__":
-    ic, ih = Changer.devices("input")
-    oc, oh = Changer.devices("output")
+    ic, ih = Application.devices("input")
+    oc, oh = Application.devices("output")
 
     parser = ArgumentParser()
+    parser.add_argument("-a", "--audio", required=True, help="audio file")
     parser.add_argument("-i", "--input", type=int, choices=ic, required=True, help=ih)
     parser.add_argument("-o", "--output", type=int, choices=oc, required=True, help=oh)
-    parser.add_argument("-a", "--audio", required=True, help="audio file")
-    parser.add_argument("-c", "--codec", default="sparkaudio/spark-tts-0.5b")
-    parser.add_argument("-s", "--spark", required=True, help="gguf model")
+    parser.add_argument("-c", "--codec", default="annuvin/bicodec")
+    parser.add_argument("-s", "--spark", default="annuvin/spark-gguf")
+    parser.add_argument("-v", "--wav2vec2", default="annuvin/wav2vec2")
     parser.add_argument("-w", "--whisper", default="turbo")
     args = parser.parse_args()
 
-    changer = Changer(
+    application = Application(
+        audio=args.audio,
         input=args.input,
         output=args.output,
-        audio=args.audio,
         codec=args.codec,
         spark=args.spark,
+        wav2vec2=args.wav2vec2,
         whisper=args.whisper,
     )
 
-    changer()
+    application()

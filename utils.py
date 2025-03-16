@@ -7,15 +7,15 @@ from rich import print
 class Logger:
     @staticmethod
     def info(text: str) -> None:
-        print(f"[[green]INFO[/]]: {text}")
+        print(f"[green]INFO[/]: {text}")
 
     @staticmethod
     def warn(text: str) -> None:
-        print(f"[[yellow]WARN[/]]: {text}")
+        print(f"[yellow]WARN[/]: {text}")
 
     @staticmethod
     def error(text: str) -> None:
-        print(f"[[red]ERRR[/]]: {text}")
+        print(f"[red]ERRR[/]: {text}")
 
 
 class Timer:
