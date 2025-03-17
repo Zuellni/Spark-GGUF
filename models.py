@@ -106,7 +106,7 @@ class Spark:
     def __init__(
         self,
         model: str = "annuvin/spark-gguf",
-        dtype: str = "f16",
+        dtype: str = "q8_0",
         context: int = 2048,
         flash_attn: bool = True,
     ) -> None:
@@ -173,14 +173,14 @@ class FasterWhisper:
         self.model = WhisperModel(model, device, compute_type=dtype)
         self.language = language
         self.task = task
-        self.beam_size = beams
+        self.beams = beams
 
     def __call__(self, audio: np.ndarray) -> str:
         segments, _ = self.model.transcribe(
             audio=audio,
             language=self.language,
             task=self.task,
-            beam_size=self.beam_size,
+            beam_size=self.beams,
         )
 
         return " ".join([s.text.strip() for s in segments if s.text.strip()])
@@ -205,14 +205,14 @@ class Whisper:
 
         self.language = language
         self.task = task
-        self.num_beams = beams
+        self.beams = beams
 
     def __call__(self, audio: np.ndarray) -> str:
         return self.model(
             inputs=audio,
             generate_kwargs={
-                "task": self.task,
                 "language": self.language,
-                "num_beams": self.num_beams,
+                "task": self.task,
+                "num_beams": self.beams,
             },
         )["text"].strip()

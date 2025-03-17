@@ -143,7 +143,7 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--codec", default="annuvin/bicodec")
     parser.add_argument("-s", "--spark", default="annuvin/spark-gguf")
     parser.add_argument("-v", "--wav2vec2", default="annuvin/wav2vec2")
-    parser.add_argument("-w", "--whisper", default="turbo")
+    parser.add_argument("-w", "--whisper", default="openai/whisper-large-v3-turbo")
     args = parser.parse_args()
 
     with Timer("Loaded codec"):

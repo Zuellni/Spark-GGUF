@@ -1,11 +1,7 @@
 einops
 einx
-faster-whisper
-llama-cpp-python
 omegaconf
 rich
 sounddevice
 soundfile
-torch
-torchaudio
 transformers
