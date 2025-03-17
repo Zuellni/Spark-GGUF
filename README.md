@@ -8,7 +8,7 @@ Some mildly interesting [Spark-TTS](https://github.com/SparkAudio/Spark-TTS) scr
 **Q**: Can I run it on RPI4B/Nokia 3310?  
 **A**: No, but you can walk it. Very slowly.
 
-**Q**: This is not SOTA as of `<current time>`. Why even bother?  
+**Q**: This is not SOTA as of `<current date>`. Why even bother?  
 **A**: At least it's not another implementation of Sesame's rug pull.
 
 **Q**: [FastAPI](https://github.com/fastapi/fastapi) server for general use?  
