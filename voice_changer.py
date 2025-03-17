@@ -4,6 +4,7 @@ from typing import Literal
 
 import numpy as np
 import sounddevice as sd
+import torch
 
 from models import Codec, Spark, Whisper
 from utils import Logger, Timer
@@ -24,30 +25,30 @@ class Application:
 
     def __init__(
         self,
-        audio: str,
         input: int,
         output: int,
-        codec: str,
-        spark: str,
-        wav2vec2: str,
-        whisper: str,
-        sample_rate: int = 16000,
+        codec: Codec,
+        spark: Spark,
+        whisper: Whisper,
+        tokens: torch.Tensor,
+        tokens_str: str,
         block_duration: int = 30,
         detection_threshold: float = 0.01,
         silence_threshold: int = 5,
         queue_threshold: int = 10,
         sleep: int = 100,
     ) -> None:
-        self.audio = audio
         self.input = input
         self.output = output
+
         self.codec = codec
         self.spark = spark
-        self.wav2vec2 = wav2vec2
         self.whisper = whisper
 
-        self.sample_rate = sample_rate
-        self.block_size = int(sample_rate * block_duration / 1000)
+        self.tokens = tokens
+        self.tokens_str = tokens_str
+
+        self.block_size = int(codec.sample_rate * block_duration / 1000)
         self.detection_threshold = detection_threshold
         self.silence_threshold = silence_threshold
         self.queue_threshold = queue_threshold
@@ -68,85 +69,67 @@ class Application:
             self.silence_counter = 0
 
     def __call__(self) -> None:
-        with Timer("Loaded codec"):
-            codec = Codec(self.codec, self.wav2vec2)
-
-        with Timer("Loaded spark"):
-            spark = Spark(self.spark)
-
-        with Timer("Loaded whisper"):
-            whisper = Whisper(self.whisper)
-
-        with Timer("Encoded audio"):
-            tensor, token_str = codec.encode(self.audio)
-
-        Logger.info("Listening")
-
         with sd.InputStream(
-            samplerate=self.sample_rate,
+            samplerate=self.codec.sample_rate,
             blocksize=self.block_size,
             device=self.input,
             channels=1,
             callback=self.callback,
         ):
-            try:
-                while True:
-                    sd.sleep(self.sleep)
+            while True:
+                sd.sleep(self.sleep)
 
-                    if self.silence_counter < self.silence_threshold:
-                        self.silence_counter += 1
+                if self.silence_counter < self.silence_threshold:
+                    self.silence_counter += 1
+                    continue
+
+                if self.queue.qsize() < self.queue_threshold:
+                    continue
+
+                self.silence_counter = 0
+
+                with Timer() as timer:
+                    try:
+                        data = [self.queue.get() for _ in range(self.queue.qsize())]
+                        data = np.concatenate(data).squeeze()
+                        text = whisper(data)
+                    except:
+                        Logger.error("Transcription error")
                         continue
 
-                    if self.queue.qsize() < self.queue_threshold:
+                if text:
+                    timer(f'Transcribed "{text}"')
+                else:
+                    Logger.warn("Empty transcript")
+                    continue
+
+                with Timer() as timer:
+                    try:
+                        tokens_str = spark(text, self.tokens_str)
+                    except:
+                        Logger.error("Generation error")
                         continue
-
-                    self.silence_counter = 0
-
-                    with Timer() as timer:
-                        try:
-                            data = [self.queue.get() for _ in range(self.queue.qsize())]
-                            data = np.concatenate(data).squeeze()
-                            text = whisper(data)
-                        except:
-                            Logger.error("Transcription error")
-                            continue
-
-                    if text:
-                        timer(f'Transcribed "{text}"')
-                    else:
-                        Logger.warn("Empty transcript")
-                        continue
-
-                    with Timer() as timer:
-                        try:
-                            tokens = spark(text, token_str)
-                        except:
-                            Logger.error("Generation error")
-                            continue
-
-                        try:
-                            data = codec.decode(tensor, tokens)
-                        except:
-                            Logger.error("Decoding error")
-                            continue
-
-                    timer(
-                        f"Generated {data.shape[0] / self.sample_rate:.2f} "
-                        "seconds of audio"
-                    )
 
                     try:
-                        sd.play(
-                            data=data,
-                            samplerate=self.sample_rate,
-                            blocking=True,
-                            device=self.output,
-                        )
+                        data = codec.decode(self.tokens, tokens_str)
                     except:
-                        Logger.error("Playback error")
-            except KeyboardInterrupt:
-                Logger.warn("Quitting")
-                spark.unload()
+                        Logger.error("Decoding error")
+                        continue
+
+                timer(
+                    f"Generated {data.shape[0] / self.codec.sample_rate:.2f}"
+                    " seconds of audio"
+                )
+
+                try:
+                    sd.play(
+                        data=data,
+                        samplerate=self.codec.sample_rate,
+                        blocking=True,
+                        device=self.output,
+                    )
+                except:
+                    Logger.error("Playback error")
 
 
 if __name__ == "__main__":
@@ -163,14 +146,32 @@ if __name__ == "__main__":
     parser.add_argument("-w", "--whisper", default="turbo")
     args = parser.parse_args()
 
+    with Timer("Loaded codec"):
+        codec = Codec(args.codec, args.wav2vec2)
+
+    with Timer("Loaded spark"):
+        spark = Spark(args.spark)
+
+    with Timer("Loaded whisper"):
+        whisper = Whisper(args.whisper)
+
+    with Timer("Encoded audio"):
+        tokens, tokens_str = codec.encode(args.audio)
+        codec.warmup(tokens)
+
     application = Application(
-        audio=args.audio,
         input=args.input,
         output=args.output,
-        codec=args.codec,
-        spark=args.spark,
-        wav2vec2=args.wav2vec2,
-        whisper=args.whisper,
+        codec=codec,
+        spark=spark,
+        whisper=whisper,
+        tokens=tokens,
+        tokens_str=tokens_str,
     )
 
-    application()
+    try:
+        Logger.info("Listening")
+        application()
+    except KeyboardInterrupt:
+        Logger.warn("Quitting")
+        spark.unload()
