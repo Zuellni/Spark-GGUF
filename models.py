@@ -71,11 +71,8 @@ class Codec:
 
         return audio[:, : self.ref_len]
 
-    def encode(self, path: str) -> tuple[torch.Tensor, str]:
-        audio = self._load(path)
-        ref = self._process(audio)
-
-        inputs = self.processor(
+    def _extract(self, audio: torch.Tensor) -> torch.Tensor:
+        feat = self.processor(
             raw_speech=audio.squeeze(),
             output_hidden_states=True,
             padding=True,
@@ -83,10 +80,15 @@ class Codec:
             sampling_rate=self.sample_rate,
         ).input_values.to(self.device, self.dtype)
 
-        feat = self.extractor(inputs).hidden_states
-        feat = (feat[11] + feat[14] + feat[16]) / 3.0
+        feat = self.extractor(feat).hidden_states
+        return (feat[11] + feat[14] + feat[16]) / 3.0
 
-        _, tokens = self.model.tokenize({"wav": audio, "ref_wav": ref, "feat": feat})
+    def encode(self, path: str) -> tuple[torch.Tensor, str]:
+        wav = self._load(path)
+        ref_wav = self._process(wav)
+        feat = self._extract(wav)
+
+        _, tokens = self.model.tokenize({"wav": wav, "ref_wav": ref_wav, "feat": feat})
         tokens_str = "".join([f"<|bicodec_global_{t}|>" for t in tokens.squeeze()])
         return tokens, tokens_str
 

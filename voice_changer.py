@@ -96,8 +96,13 @@ class Application:
                         Logger.error("Transcription error")
                         continue
 
+                timer(
+                    f"Transcribed {len(data) / self.codec.sample_rate:.2f}"
+                    " seconds of audio"
+                )
+
                 if text:
-                    timer(f'Transcribed "{text}"')
+                    Logger.info(f'Transcribed "{text}"')
                 else:
                     Logger.warn("Empty transcript")
                     continue
@@ -116,17 +121,13 @@ class Application:
                         continue
 
                 timer(
-                    f"Generated {data.shape[0] / self.codec.sample_rate:.2f}"
+                    f"Generated {len(data) / self.codec.sample_rate:.2f}"
                     " seconds of audio"
                 )
 
                 try:
-                    sd.play(
-                        data=data,
-                        samplerate=self.codec.sample_rate,
-                        blocking=True,
-                        device=self.output,
-                    )
+                    Logger.info("Playing")
+                    sd.play(data, self.codec.sample_rate, device=self.output)
                 except:
                     Logger.error("Playback error")
 
