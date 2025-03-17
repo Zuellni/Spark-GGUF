@@ -13,7 +13,6 @@ import torch
 import torchaudio
 import torchaudio.functional as F
 import transformers
-from faster_whisper import WhisperModel
 from llama_cpp import Llama
 from omegaconf import OmegaConf
 from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Model
@@ -31,7 +30,6 @@ class Codec:
         wav2vec2: Path = "annuvin/wav2vec2",
         device: str = "cuda",
         dtype: Literal["float16", "float32"] = "float16",
-        flash_attn: bool = True,
         ref_len: int = 6,
     ) -> None:
         if not Path(model).is_dir():
@@ -47,16 +45,9 @@ class Codec:
             self.model = BiCodec.load_from_checkpoint(model).to(self.device, self.dtype)
 
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained(wav2vec2)
-        self.extractor = Wav2Vec2Model.from_pretrained(
-            pretrained_model_name_or_path=wav2vec2,
-            attn_implementation=(
-                "flash_attention_2"
-                if flash_attn and self.dtype == torch.float16
-                else "sdpa"
-            ),
-            torch_dtype=self.dtype,
-        ).to(self.device)
+        self.extractor = Wav2Vec2Model.from_pretrained(wav2vec2, torch_dtype=self.dtype)
         self.extractor.config.output_hidden_states = True
+        self.extractor.to(self.device)
 
         self.config = OmegaConf.load(Path(model) / "config.yaml")
         self.hop_len = self.config.audio_tokenizer.mel_params.hop_length
@@ -65,29 +56,29 @@ class Codec:
         self.pattern = re.compile(r"<\|bicodec_semantic_(\d+)\|>")
 
     def _load(self, path: str) -> torch.Tensor:
-        wav, sample_rate = torchaudio.load(path)
-        wav = wav.to(self.device, self.dtype)
+        audio, sample_rate = torchaudio.load(path)
+        audio = audio.to(self.device, self.dtype)
 
-        if wav.shape[0] > 1:
-            wav = torch.mean(wav, dim=0, keepdim=True)
+        if audio.shape[0] > 1:
+            audio = torch.mean(audio, dim=0, keepdim=True)
 
         if sample_rate != self.sample_rate:
-            wav = F.resample(wav, sample_rate, self.sample_rate)
+            audio = F.resample(audio, sample_rate, self.sample_rate)
 
-        return wav
+        return audio
 
-    def _process(self, wav: torch.Tensor) -> torch.Tensor:
-        if wav.shape[1] < self.ref_len:
-            wav = torch.tile(wav, (1, self.ref_len // wav.shape[1] + 1))
+    def _process(self, audio: torch.Tensor) -> torch.Tensor:
+        if audio.shape[1] < self.ref_len:
+            audio = torch.tile(audio, (1, self.ref_len // audio.shape[1] + 1))
 
-        return wav[:, : self.ref_len]
+        return audio[:, : self.ref_len]
 
     def encode(self, path: str) -> tuple[torch.Tensor, str]:
-        wav = self._load(path)
-        ref = self._process(wav)
+        audio = self._load(path)
+        ref = self._process(audio)
 
         inputs = self.processor(
-            raw_speech=wav.squeeze(),
+            raw_speech=audio.squeeze(),
             output_hidden_states=True,
             padding=True,
             return_tensors="pt",
@@ -97,15 +88,15 @@ class Codec:
         feat = self.extractor(inputs).hidden_states
         feat = (feat[11] + feat[14] + feat[16]) / 3.0
 
-        _, tokens = self.model.tokenize({"wav": wav, "ref_wav": ref, "feat": feat})
+        _, tokens = self.model.tokenize({"wav": audio, "ref_wav": ref, "feat": feat})
         tokens_str = "".join([f"<|bicodec_global_{t}|>" for t in tokens.squeeze()])
         return tokens, tokens_str
 
     def decode(self, tokens: torch.Tensor, tokens_str: str) -> np.ndarray:
-        wav = [int(t) for t in re.findall(self.pattern, tokens_str)]
-        wav = torch.tensor([wav], device=self.device)
-        wav = self.model.detokenize(wav, tokens)
-        return wav.squeeze().float().cpu().numpy()
+        audio = [int(t) for t in re.findall(self.pattern, tokens_str)]
+        audio = torch.tensor([audio], device=self.device)
+        audio = self.model.detokenize(audio, tokens)
+        return audio.squeeze().float().cpu().numpy()
 
     def warmup(self, tokens: torch.Tensor) -> None:
         self.model.detokenize(tokens.squeeze(0), tokens)
@@ -167,7 +158,7 @@ class Spark:
         return self.decode(tokens_list, special=True)
 
 
-class Whisper:
+class FasterWhisper:
     def __init__(
         self,
         model: str = "turbo",
@@ -175,11 +166,53 @@ class Whisper:
         dtype: str = "float16",
         language: str = "en",
         task: Literal["transcribe", "translate"] = "transcribe",
+        beams: int = 5,
     ) -> None:
+        from faster_whisper import WhisperModel
+
         self.model = WhisperModel(model, device, compute_type=dtype)
         self.language = language
         self.task = task
+        self.beam_size = beams
 
-    def __call__(self, wav: np.ndarray) -> str:
-        segments, _ = self.model.transcribe(wav, self.language, self.task)
+    def __call__(self, audio: np.ndarray) -> str:
+        segments, _ = self.model.transcribe(
+            audio=audio,
+            language=self.language,
+            task=self.task,
+            beam_size=self.beam_size,
+        )
+
         return " ".join([s.text.strip() for s in segments if s.text.strip()])
+
+
+class Whisper:
+    def __init__(
+        self,
+        model: str = "openai/whisper-large-v3-turbo",
+        device: str = "cuda",
+        dtype: str = "float16",
+        language: str = "en",
+        task: Literal["transcribe", "translate"] = "transcribe",
+        beams: int = 5,
+    ) -> None:
+        self.model = transformers.pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            device=device,
+            torch_dtype=getattr(torch, dtype),
+        )
+
+        self.language = language
+        self.task = task
+        self.num_beams = beams
+
+    def __call__(self, audio: np.ndarray) -> str:
+        return self.model(
+            inputs=audio,
+            generate_kwargs={
+                "task": self.task,
+                "language": self.language,
+                "num_beams": self.num_beams,
+            },
+        )["text"].strip()
