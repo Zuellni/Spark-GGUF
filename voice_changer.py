@@ -157,7 +157,6 @@ if __name__ == "__main__":
 
     with Timer("Encoded audio"):
         tokens, tokens_str = codec.encode(args.audio)
-        codec.warmup(tokens)
 
     application = Application(
         input=args.input,
