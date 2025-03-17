@@ -52,4 +52,4 @@ pip install faster-whisper # optional, only if you'd like to use faster whisper
 ```sh
 python voice_changer.py -i <input device id> -o <output device id> -a <your speaker file>
 ```
-If you want to route the output to a microphone, you will need to install something like [VB-Cable](https://vb-audio.com/Cable) on Windows, or an equivalent on Linux. Set your real microphone as `input` for the script (run without args to show ids) and `Cable Input` as `output`. Set `Cable Output` as your default system microphone and enable `listen to this device` in sound settings to monitor the output.
+If you want to use the output as mic input, you will need to install something like [VB-Cable](https://vb-audio.com/Cable) on Windows, or an equivalent on Linux. Set your real mic as `input` for the script (run without args to show ids) and `Cable Input` as `output`. Set `Cable Output` as your default system mic and enable `listen to this device` in sound settings to monitor the output.
