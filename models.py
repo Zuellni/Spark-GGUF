@@ -58,7 +58,7 @@ class Codec:
 
     def _load(self, path: str) -> torch.Tensor:
         audio, sample_rate = torchaudio.load(path)
-        audio = audio.to(device, self.dtype)
+        audio = audio.to(self.device, self.dtype)
 
         if audio.shape[0] > 1:
             audio = torch.mean(audio, dim=0, keepdim=True)
