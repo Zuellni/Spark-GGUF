@@ -43,12 +43,12 @@ class Codec:
         self.dtype = getattr(torch, dtype)
 
         with contextlib.redirect_stdout(None):
-            self.model = BiCodec.load_from_checkpoint(model).to(self.device, self.dtype)
+            self.model = BiCodec.load_from_checkpoint(model).to(device, self.dtype)
 
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained(wav2vec2)
         self.extractor = Wav2Vec2Model.from_pretrained(wav2vec2, torch_dtype=self.dtype)
         self.extractor.config.output_hidden_states = True
-        self.extractor.to(self.device)
+        self.extractor.to(device)
 
         self.config = OmegaConf.load(Path(model) / "config.yaml")
         self.hop_len = self.config.audio_tokenizer.mel_params.hop_length
@@ -58,7 +58,7 @@ class Codec:
 
     def _load(self, path: str) -> torch.Tensor:
         audio, sample_rate = torchaudio.load(path)
-        audio = audio.to(self.device, self.dtype)
+        audio = audio.to(device, self.dtype)
 
         if audio.shape[0] > 1:
             audio = torch.mean(audio, dim=0, keepdim=True)

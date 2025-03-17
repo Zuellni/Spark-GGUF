@@ -34,9 +34,8 @@ class Application:
         tokens_str: str,
         block_duration: int = 30,
         detection_threshold: float = 0.01,
-        silence_threshold: int = 5,
-        queue_threshold: int = 10,
-        sleep: int = 100,
+        silence_threshold: int = 8,
+        queue_threshold: int = 16,
     ) -> None:
         self.input = input
         self.output = output
@@ -48,11 +47,11 @@ class Application:
         self.tokens = tokens
         self.tokens_str = tokens_str
 
+        self.block_duration = block_duration
         self.block_size = int(codec.sample_rate * block_duration / 1000)
         self.detection_threshold = detection_threshold
         self.silence_threshold = silence_threshold
         self.queue_threshold = queue_threshold
-        self.sleep = sleep
 
         self.silence_counter = 0
         self.queue = Queue()
@@ -77,7 +76,7 @@ class Application:
             callback=self.callback,
         ):
             while True:
-                sd.sleep(self.sleep)
+                sd.sleep(self.block_duration)
 
                 if self.silence_counter < self.silence_threshold:
                     self.silence_counter += 1
