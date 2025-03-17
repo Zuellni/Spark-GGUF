@@ -11,7 +11,7 @@ Some mildly interesting [Spark-TTS](https://github.com/SparkAudio/Spark-TTS) scr
 **Q**: This is not SOTA as of `<current time>`. Why even bother?  
 **A**: At least it's not another implementation of Sesame's rug pull.
 
-**Q**: [FastAPI](https://github.com/fastapi) server for general use?  
+**Q**: [FastAPI](https://github.com/fastapi/fastapi) server for general use?  
 **A**: Yes, I'll ask DeepSeek to code it when I have the time.
 
 **Q**: Why not [ExLlamaV2](https://github.com/turboderp-org/exllamav2)?  
@@ -52,4 +52,4 @@ pip install faster-whisper # optional, only if you'd like to use faster whisper
 ```sh
 python voice_changer.py -i <input device id> -o <output device id> -a <your speaker file>
 ```
-If you want to route the output to a microphone, you will need to install something like [VB-Cable](https://vb-audio.com/Cable) on Windows, or an equivalent on Linux. Set your real microphone as `input` for the script (run without args to show ids) and `Cable Input` as `output`. Set `Cable Output` as your default system microphone and enable `listen to this device` in settings to monitor the output.
+If you want to route the output to a microphone, you will need to install something like [VB-Cable](https://vb-audio.com/Cable) on Windows, or an equivalent on Linux. Set your real microphone as `input` for the script (run without args to show ids) and `Cable Input` as `output`. Set `Cable Output` as your default system microphone and enable `listen to this device` in sound settings to monitor the output.
