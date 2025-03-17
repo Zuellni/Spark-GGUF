@@ -1,4 +1,5 @@
 import contextlib
+import multiprocessing
 import re
 import sys
 import warnings
@@ -62,10 +63,7 @@ class Codec:
         if audio.shape[0] > 1:
             audio = torch.mean(audio, dim=0, keepdim=True)
 
-        if sample_rate != self.sample_rate:
-            audio = F.resample(audio, sample_rate, self.sample_rate)
-
-        return audio
+        return F.resample(audio, sample_rate, self.sample_rate)
 
     def _process(self, audio: torch.Tensor) -> torch.Tensor:
         if audio.shape[1] < self.ref_len:
@@ -106,8 +104,9 @@ class Spark:
     def __init__(
         self,
         model: str = "annuvin/spark-gguf",
-        dtype: str = "q8_0",
+        dtype: str = "f16",
         context: int = 2048,
+        threads: int = multiprocessing.cpu_count(),
         flash_attn: bool = True,
     ) -> None:
         if not Path(model).is_file():
@@ -118,9 +117,15 @@ class Spark:
                 model_path=model,
                 n_gpu_layers=-1,
                 n_ctx=context,
+                n_batch=context,
+                n_ubatch=context,
+                n_threads=threads,
+                n_threads_batch=threads,
                 flash_attn=flash_attn,
                 verbose=False,
             )
+
+            self.context = context
 
     def encode(self, text: str, bos: bool = False, special: bool = False) -> list[int]:
         return self.model.tokenize(text.encode(), bos, special)
@@ -128,7 +133,7 @@ class Spark:
     def decode(self, tokens: list[int], special: bool = False) -> str:
         return self.model.detokenize(tokens, special=special).decode()
 
-    def unload(self) -> None:
+    def unload(self):
         if self.model._sampler:
             self.model._sampler.close()
 
@@ -147,43 +152,16 @@ class Spark:
         )
 
         tokens = self.encode(text, special=True)
+        max_tokens = self.context - len(tokens)
         tokens_list = []
 
         for token in self.model.generate(tokens):
-            if token == self.model.token_eos():
+            if token == self.model.token_eos() or len(tokens_list) >= max_tokens:
                 break
 
             tokens_list.append(token)
 
         return self.decode(tokens_list, special=True)
-
-
-class FasterWhisper:
-    def __init__(
-        self,
-        model: str = "turbo",
-        device: str = "cuda",
-        dtype: str = "float16",
-        language: str = "en",
-        task: Literal["transcribe", "translate"] = "transcribe",
-        beams: int = 5,
-    ) -> None:
-        from faster_whisper import WhisperModel
-
-        self.model = WhisperModel(model, device, compute_type=dtype)
-        self.language = language
-        self.task = task
-        self.beams = beams
-
-    def __call__(self, audio: np.ndarray) -> str:
-        segments, _ = self.model.transcribe(
-            audio=audio,
-            language=self.language,
-            task=self.task,
-            beam_size=self.beams,
-        )
-
-        return " ".join([s.text.strip() for s in segments if s.text.strip()])
 
 
 class Whisper:
@@ -216,3 +194,31 @@ class Whisper:
                 "num_beams": self.beams,
             },
         )["text"].strip()
+
+
+class FasterWhisper:
+    def __init__(
+        self,
+        model: str = "turbo",
+        device: str = "cuda",
+        dtype: str = "float16",
+        language: str = "en",
+        task: Literal["transcribe", "translate"] = "transcribe",
+        beams: int = 5,
+    ) -> None:
+        from faster_whisper import WhisperModel
+
+        self.model = WhisperModel(model, device, compute_type=dtype)
+        self.language = language
+        self.task = task
+        self.beams = beams
+
+    def __call__(self, audio: np.ndarray) -> str:
+        segments, _ = self.model.transcribe(
+            audio=audio,
+            language=self.language,
+            task=self.task,
+            beam_size=self.beams,
+        )
+
+        return " ".join([s.text.strip() for s in segments])

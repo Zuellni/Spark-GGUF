@@ -17,6 +17,9 @@ Some mildly interesting [Spark-TTS](https://github.com/SparkAudio/Spark-TTS) scr
 **Q**: Why not [ExLlamaV2](https://github.com/turboderp-org/exllamav2)?  
 **A**: I had issues quantizing the model and it was only generating nonsense.
 
+**Q**: Why not [whisper.cpp](https://github.com/ggerganov/whisper.cpp)?
+**A**: I can't get any of the python bindings to work with CUDA.
+
 ## Installation
 Clone the repo:
 ```sh
