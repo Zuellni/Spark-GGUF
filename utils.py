@@ -32,7 +32,9 @@ class Timer:
     def __exit__(self, *args) -> None:
         self.stop = time()
         self.total = self.stop - self.start
-        self.text and self(self.text)
+
+        if self.text:
+            self(self.text)
 
     def __call__(self, text: str) -> None:
         Logger.info(f"{text} in {self.total:.2f} seconds")

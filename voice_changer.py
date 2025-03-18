@@ -90,7 +90,7 @@ class Application:
                 with Timer() as timer:
                     try:
                         data = [self.queue.get() for _ in range(self.queue.qsize())]
-                        data = np.concatenate(data).squeeze()
+                        data = np.concat(data).squeeze()
                         text = whisper(data)
                     except:
                         Logger.error("Transcription error")

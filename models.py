@@ -27,8 +27,8 @@ from sparktts.models.bicodec import BiCodec
 class Codec:
     def __init__(
         self,
-        model: Path = "annuvin/bicodec",
-        wav2vec2: Path = "annuvin/wav2vec2",
+        model: str = "annuvin/bicodec",
+        wav2vec2: str = "annuvin/wav2vec2",
         device: str = "cuda",
         dtype: Literal["float16", "float32"] = "float16",
     ) -> None:
@@ -54,7 +54,7 @@ class Codec:
         self.sample_rate = self.config.audio_tokenizer.mel_params.sample_rate
         self.pattern = re.compile(r"<\|bicodec_semantic_(\d+)\|>")
 
-    def load(self, path: str, max_len: int = None) -> torch.Tensor:
+    def load(self, path: str, max_len: int | None = None) -> torch.Tensor:
         audio, sample_rate = torchaudio.load(path)
         audio = audio.to(self.device, self.dtype)
 
@@ -66,13 +66,8 @@ class Codec:
 
         return audio[:, :max_len]
 
-    def normalize(self, audio: torch.Tensor, contrast: float = 50.0) -> torch.Tensor:
-        audio = F.contrast(audio, contrast)
-        audio = audio - torch.mean(audio, dim=1, keepdim=True)
-        return audio / torch.max(torch.abs(audio))
-
-    def process(self, audio: torch.Tensor, max_len: int = None) -> torch.Tensor:
-        if audio.shape[1] < max_len:
+    def process(self, audio: torch.Tensor, max_len: int | None = None) -> torch.Tensor:
+        if max_len and max_len > audio.shape[1]:
             audio = torch.tile(audio, (1, max_len // audio.shape[1] + 1))
 
         return audio[:, :max_len]
@@ -90,15 +85,12 @@ class Codec:
         return (features[11] + features[14] + features[16]) / 3
 
     def encode(
-        self, path: str, wav_len: int = 30, ref_len: int = 6, normalize: bool = True
+        self, path: str, wav_len: int = 30, ref_len: int = 6
     ) -> tuple[torch.Tensor, str]:
         wav_len = self.sample_rate * wav_len // self.hop_len * self.hop_len
-        wav = self.load(path, wav_len)
-
-        if normalize:
-            wav = self.normalize(wav)
-
         ref_len = self.sample_rate * ref_len // self.hop_len * self.hop_len
+
+        wav = self.load(path, wav_len)
         ref_wav = self.process(wav, ref_len)
         feat = self.extract(wav)
 
@@ -117,7 +109,7 @@ class Spark:
     def __init__(
         self,
         model: str = "annuvin/spark-gguf",
-        dtype: str = "f16",
+        dtype: str = "q8_0",
         context: int = 2048,
         threads: int = multiprocessing.cpu_count(),
         flash_attn: bool = True,
@@ -179,9 +171,15 @@ class Spark:
         tokens_list = []
 
         for token in self.model.generate(
-            tokens, top_k, top_p, min_p, typical_p, temp, repeat_penalty
+            tokens=tokens,
+            top_k=top_k,
+            top_p=top_p,
+            min_p=min_p,
+            typical_p=typical_p,
+            temp=temp,
+            repeat_penalty=repeat_penalty,
         ):
-            if token == self.model.token_eos() or len(tokens_list) > max_tokens:
+            if token == self.model.token_eos() or len(tokens_list) >= max_tokens:
                 break
 
             tokens_list.append(token)
