@@ -1,5 +1,4 @@
 import contextlib
-import multiprocessing
 import re
 import sys
 import warnings
@@ -111,7 +110,6 @@ class Spark:
         path: str = "annuvin/spark-gguf",
         file: str = "model.q8_0.gguf",
         context: int = 2048,
-        threads: int = multiprocessing.cpu_count(),
         flash_attn: bool = True,
     ) -> None:
         if not Path(path).is_file():
@@ -124,8 +122,6 @@ class Spark:
                 n_ctx=context,
                 n_batch=context,
                 n_ubatch=context,
-                n_threads=threads,
-                n_threads_batch=threads,
                 flash_attn=flash_attn,
                 verbose=False,
             )

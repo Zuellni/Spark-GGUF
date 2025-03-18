@@ -3,7 +3,7 @@ Some mildly interesting [Spark-TTS](https://github.com/SparkAudio/Spark-TTS) scr
 
 ## FAQ
 **Q**: How fast?  
-**A**: Around a second of delay from mic to playback on a 3060 with the `q4_0` quant.
+**A**: Around a second of delay from mic to playback on a 3060 with the `q4_k` quant.
 
 **Q**: Can I run it on RPI4B/Nokia 3310?  
 **A**: No, but you can walk it. Very slowly.
