@@ -27,13 +27,13 @@ from sparktts.models.bicodec import BiCodec
 class Codec:
     def __init__(
         self,
-        model: str = "annuvin/bicodec",
+        codec: str = "annuvin/bicodec",
         wav2vec2: str = "annuvin/wav2vec2",
         device: str = "cuda",
         dtype: Literal["float16", "float32"] = "float16",
     ) -> None:
-        if not Path(model).is_dir():
-            model = hf.snapshot_download(model)
+        if not Path(codec).is_dir():
+            codec = hf.snapshot_download(codec)
 
         if not Path(wav2vec2).is_dir():
             wav2vec2 = hf.snapshot_download(wav2vec2)
@@ -42,14 +42,14 @@ class Codec:
         self.dtype = getattr(torch, dtype)
 
         with contextlib.redirect_stdout(None):
-            self.model = BiCodec.load_from_checkpoint(model).to(device, self.dtype)
+            self.model = BiCodec.load_from_checkpoint(codec).to(device, self.dtype)
 
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained(wav2vec2)
         self.extractor = Wav2Vec2Model.from_pretrained(wav2vec2, torch_dtype=self.dtype)
         self.extractor.config.output_hidden_states = True
         self.extractor.to(device)
 
-        self.config = OmegaConf.load(Path(model) / "config.yaml")
+        self.config = OmegaConf.load(Path(codec) / "config.yaml")
         self.hop_len = self.config.audio_tokenizer.mel_params.hop_length
         self.sample_rate = self.config.audio_tokenizer.mel_params.sample_rate
         self.pattern = re.compile(r"<\|bicodec_semantic_(\d+)\|>")
@@ -108,18 +108,18 @@ class Codec:
 class Spark:
     def __init__(
         self,
-        model: str = "annuvin/spark-gguf",
-        dtype: str = "q8_0",
+        path: str = "annuvin/spark-gguf",
+        file: str = "model.q8_0.gguf",
         context: int = 2048,
         threads: int = multiprocessing.cpu_count(),
         flash_attn: bool = True,
     ) -> None:
-        if not Path(model).is_file():
-            model = hf.hf_hub_download(model, f"model.{dtype}.gguf")
+        if not Path(path).is_file():
+            path = hf.hf_hub_download(path, file)
 
         with contextlib.redirect_stderr(None), contextlib.redirect_stdout(None):
             self.model = Llama(
-                model_path=model,
+                model_path=path,
                 n_gpu_layers=-1,
                 n_ctx=context,
                 n_batch=context,
