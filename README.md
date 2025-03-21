@@ -1,5 +1,5 @@
 # Spark-GGUF
-Some mildly interesting [Spark-TTS](https://github.com/SparkAudio/Spark-TTS) scripts using python bindings for [llama.cpp](https://github.com/ggml-org/llama.cpp).
+[Spark-TTS](https://github.com/SparkAudio/Spark-TTS) inference using python bindings for [llama.cpp](https://github.com/ggml-org/llama.cpp).
 
 ## Installation
 Clone the repo:
