@@ -6,7 +6,7 @@ import numpy as np
 import sounddevice as sd
 import torch
 
-from models import Codec, Spark, Whisper
+from models import Bicodec, Spark, Whisper
 from utils import Logger, Timer
 
 
@@ -27,7 +27,7 @@ class Application:
         self,
         input: int,
         output: int,
-        codec: Codec,
+        bicodec: Bicodec,
         spark: Spark,
         whisper: Whisper,
         tokens: torch.Tensor,
@@ -40,7 +40,7 @@ class Application:
         self.input = input
         self.output = output
 
-        self.codec = codec
+        self.bicodec = bicodec
         self.spark = spark
         self.whisper = whisper
 
@@ -48,7 +48,7 @@ class Application:
         self.tokens_str = tokens_str
 
         self.block_duration = block_duration
-        self.block_size = int(codec.sample_rate * block_duration / 1000)
+        self.block_size = int(bicodec.sample_rate * block_duration / 1000)
         self.detection_threshold = detection_threshold
         self.silence_threshold = silence_threshold
         self.queue_threshold = queue_threshold
@@ -69,7 +69,7 @@ class Application:
 
     def __call__(self) -> None:
         with sd.InputStream(
-            samplerate=self.codec.sample_rate,
+            samplerate=self.bicodec.sample_rate,
             blocksize=self.block_size,
             device=self.input,
             channels=1,
@@ -91,13 +91,13 @@ class Application:
                     try:
                         data = [self.queue.get() for _ in range(self.queue.qsize())]
                         data = np.concat(data).squeeze()
-                        text = whisper(data)
+                        text = whisper.transcribe(data)
                     except:
                         Logger.error("Transcription error")
                         continue
 
                 timer(
-                    f"Transcribed {len(data) / self.codec.sample_rate:.2f}"
+                    f"Transcribed {len(data) / self.bicodec.sample_rate:.2f}"
                     " seconds of audio"
                 )
 
@@ -109,25 +109,25 @@ class Application:
 
                 with Timer() as timer:
                     try:
-                        tokens_str = spark(text, self.tokens_str)
+                        tokens_str = spark.generate(text, self.tokens_str)
                     except:
                         Logger.error("Generation error")
                         continue
 
                     try:
-                        data = codec.decode(self.tokens, tokens_str)
+                        data = bicodec.decode(self.tokens, tokens_str)
                     except:
                         Logger.error("Decoding error")
                         continue
 
                 timer(
-                    f"Generated {len(data) / self.codec.sample_rate:.2f}"
+                    f"Generated {len(data) / self.bicodec.sample_rate:.2f}"
                     " seconds of audio"
                 )
 
                 try:
                     Logger.info("Playing")
-                    sd.play(data, self.codec.sample_rate, device=self.output)
+                    sd.play(data, self.bicodec.sample_rate, device=self.output)
                 except:
                     Logger.error("Playback error")
 
@@ -140,14 +140,14 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--audio", required=True, help="audio file")
     parser.add_argument("-i", "--input", type=int, choices=ic, required=True, help=ih)
     parser.add_argument("-o", "--output", type=int, choices=oc, required=True, help=oh)
-    parser.add_argument("-c", "--codec", default="annuvin/bicodec")
+    parser.add_argument("-b", "--bicodec", default="annuvin/bicodec")
     parser.add_argument("-s", "--spark", default="annuvin/spark-gguf")
-    parser.add_argument("-v", "--wav2vec2", default="annuvin/wav2vec2")
+    parser.add_argument("-v", "--wav2vec2", default="annuvin/wav2vec2-st")
     parser.add_argument("-w", "--whisper", default="openai/whisper-large-v3-turbo")
     args = parser.parse_args()
 
-    with Timer("Loaded codec"):
-        codec = Codec(args.codec, args.wav2vec2)
+    with Timer("Loaded bicodec"):
+        bicodec = Bicodec(args.bicodec, args.wav2vec2)
 
     with Timer("Loaded spark"):
         spark = Spark(args.spark)
@@ -156,12 +156,12 @@ if __name__ == "__main__":
         whisper = Whisper(args.whisper)
 
     with Timer("Encoded audio"):
-        tokens, tokens_str = codec.encode(args.audio)
+        tokens, tokens_str = bicodec.encode(args.audio)
 
     application = Application(
         input=args.input,
         output=args.output,
-        codec=codec,
+        bicodec=bicodec,
         spark=spark,
         whisper=whisper,
         tokens=tokens,
@@ -173,4 +173,5 @@ if __name__ == "__main__":
         application()
     except KeyboardInterrupt:
         Logger.warn("Quitting")
+    finally:
         spark.unload()

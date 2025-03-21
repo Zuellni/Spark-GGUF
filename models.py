@@ -1,11 +1,7 @@
-import contextlib
 import re
 import sys
-import warnings
 from pathlib import Path
 from typing import Literal
-
-warnings.simplefilter("ignore")
 
 import huggingface_hub as hf
 import numpy as np
@@ -23,42 +19,44 @@ sys.path.append(str(Path(__file__).parent / "spark_tts"))
 from sparktts.models.bicodec import BiCodec
 
 
-class Codec:
+class Bicodec:
     def __init__(
         self,
-        codec: str = "annuvin/bicodec",
-        wav2vec2: str = "annuvin/wav2vec2",
+        bicodec: Path | str = "annuvin/bicodec",
+        wav2vec2: Path | str = "annuvin/wav2vec2-st",
         device: str = "cuda",
-        dtype: Literal["float16", "float32"] = "float16",
+        dtype: str = "float16",
         flash_attn: bool = True,
     ) -> None:
-        if not Path(codec).is_dir():
-            codec = hf.snapshot_download(codec)
+        if not (bicodec := Path(bicodec)).is_dir():
+            bicodec = Path(hf.snapshot_download(bicodec.as_posix()))
 
-        if not Path(wav2vec2).is_dir():
-            wav2vec2 = hf.snapshot_download(wav2vec2)
+        if not (wav2vec2 := Path(wav2vec2)).is_dir():
+            wav2vec2 = Path(hf.snapshot_download(wav2vec2.as_posix()))
 
         self.device = device
         self.dtype = getattr(torch, dtype)
-
-        with contextlib.redirect_stdout(None):
-            self.model = BiCodec.load_from_checkpoint(codec).to(device, self.dtype)
+        self.model = BiCodec.load_from_checkpoint(bicodec).to(device, self.dtype)
 
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained(wav2vec2)
         self.extractor = Wav2Vec2Model.from_pretrained(
             pretrained_model_name_or_path=wav2vec2,
-            attn_implementation="flash_attention_2" if flash_attn else "sdpa",
+            attn_implementation=(
+                "flash_attention_2"
+                if flash_attn and dtype in ["bfloat16", "float16"]
+                else "sdpa"
+            ),
             torch_dtype=self.dtype,
         )
         self.extractor.config.output_hidden_states = True
         self.extractor.to(device)
 
-        self.config = OmegaConf.load(Path(codec) / "config.yaml")
+        self.config = OmegaConf.load(Path(bicodec) / "config.yaml")
         self.hop_len = self.config.audio_tokenizer.mel_params.hop_length
         self.sample_rate = self.config.audio_tokenizer.mel_params.sample_rate
         self.pattern = re.compile(r"<\|bicodec_semantic_(\d+)\|>")
 
-    def load(self, path: str, max_len: int | None = None) -> torch.Tensor:
+    def load(self, path: Path | str, max_len: int | None = None) -> torch.Tensor:
         audio, sample_rate = torchaudio.load(path)
         audio = audio.to(self.device, self.dtype)
 
@@ -99,11 +97,11 @@ class Codec:
         feat = self.extract(wav)
 
         _, tokens = self.model.tokenize({"wav": wav, "ref_wav": ref_wav, "feat": feat})
-        tokens_str = "".join([f"<|bicodec_global_{t}|>" for t in tokens.squeeze()])
-        return tokens, tokens_str
+        codes = "".join([f"<|bicodec_global_{t}|>" for t in tokens.squeeze()])
+        return tokens, codes
 
-    def decode(self, tokens: torch.Tensor, tokens_str: str) -> np.ndarray:
-        ids = [int(t) for t in re.findall(self.pattern, tokens_str)]
+    def decode(self, tokens: torch.Tensor, codes: str) -> np.ndarray:
+        ids = [int(c) for c in re.findall(self.pattern, codes)]
         data = torch.tensor([ids], dtype=torch.long, device=self.device)
         audio = self.model.detokenize(data, tokens)
         return audio.squeeze().float().cpu().numpy()
@@ -112,24 +110,23 @@ class Codec:
 class Spark:
     def __init__(
         self,
-        path: str = "annuvin/spark-gguf",
+        path: Path | str = "annuvin/spark-gguf",
         file: str = "model.q8_0.gguf",
-        context: int = 2048,
+        context: int = 4096,
         flash_attn: bool = True,
     ) -> None:
-        if not Path(path).is_file():
-            path = hf.hf_hub_download(path, file)
+        if not (path := Path(path)).is_file():
+            path = Path(hf.hf_hub_download(path.as_posix(), file))
 
-        with contextlib.redirect_stderr(None), contextlib.redirect_stdout(None):
-            self.model = Llama(
-                model_path=path,
-                n_gpu_layers=-1,
-                n_ctx=context,
-                n_batch=context,
-                n_ubatch=context,
-                flash_attn=flash_attn,
-                verbose=False,
-            )
+        self.model = Llama(
+            model_path=str(path),
+            n_gpu_layers=-1,
+            n_ctx=context,
+            n_batch=context,
+            n_ubatch=context,
+            flash_attn=flash_attn,
+            verbose=False,
+        )
 
     def encode(self, text: str, bos: bool = False, special: bool = False) -> list[int]:
         return self.model.tokenize(text.encode(), bos, special)
@@ -137,16 +134,10 @@ class Spark:
     def decode(self, tokens: list[int], special: bool = False) -> str:
         return self.model.detokenize(tokens, special=special).decode()
 
-    def unload(self):
-        if self.model._sampler:
-            self.model._sampler.close()
-
-        self.model.close()
-
-    def __call__(
+    def generate(
         self,
         text: str,
-        tokens_str: str,
+        codes: str,
         top_k: int = 50,
         top_p: float = 0.95,
         min_p: float = 0.0,
@@ -154,23 +145,23 @@ class Spark:
         temp: float = 0.8,
         repeat_penalty: float = 1.0,
     ) -> str:
-        text = (
+        inputs = (
             "<|task_tts|>"
             "<|start_content|>"
             f"{text}"
             "<|end_content|>"
             "<|start_global_token|>"
-            f"{tokens_str}"
+            f"{codes}"
             "<|end_global_token|>"
             "<|start_semantic_token|>"
         )
 
-        tokens = self.encode(text, special=True)
-        max_tokens = max(0, self.model.n_ctx() - len(tokens))
-        tokens_list = []
+        inputs = self.encode(inputs, special=True)
+        max_tokens = max(0, self.model.n_ctx() - len(inputs))
+        outputs = []
 
         for token in self.model.generate(
-            tokens=tokens,
+            tokens=inputs,
             top_k=top_k,
             top_p=top_p,
             min_p=min_p,
@@ -178,12 +169,20 @@ class Spark:
             temp=temp,
             repeat_penalty=repeat_penalty,
         ):
-            if token == self.model.token_eos() or len(tokens_list) >= max_tokens:
+            if token == self.model.token_eos() or len(outputs) >= max_tokens:
                 break
 
-            tokens_list.append(token)
+            outputs.append(token)
 
-        return self.decode(tokens_list, special=True)
+        return self.decode(outputs, special=True)
+
+    def unload(self) -> None:
+        if self.model._sampler:
+            self.model._sampler.close()
+
+        self.model.close()
+        self.model = None
+        torch.cuda.empty_cache()
 
 
 class Whisper:
@@ -203,7 +202,11 @@ class Whisper:
             device=device,
             torch_dtype=getattr(torch, dtype),
             model_kwargs={
-                "attn_implementation": "flash_attention_2" if flash_attn else "sdpa"
+                "attn_implementation": (
+                    "flash_attention_2"
+                    if flash_attn and dtype in ["bfloat16", "float16"]
+                    else "sdpa"
+                )
             },
         )
 
@@ -211,7 +214,7 @@ class Whisper:
         self.task = task
         self.beams = beams
 
-    def __call__(self, audio: np.ndarray) -> str:
+    def transcribe(self, audio: np.ndarray) -> str:
         return self.model(
             inputs=audio,
             generate_kwargs={
@@ -220,6 +223,10 @@ class Whisper:
                 "num_beams": self.beams,
             },
         )["text"].strip()
+
+    def unload(self) -> None:
+        self.model = None
+        torch.cuda.empty_cache()
 
 
 class FasterWhisper:
@@ -239,7 +246,7 @@ class FasterWhisper:
         self.task = task
         self.beams = beams
 
-    def __call__(self, audio: np.ndarray) -> str:
+    def transcribe(self, audio: np.ndarray) -> str:
         segments, _ = self.model.transcribe(
             audio=audio,
             language=self.language,
@@ -248,3 +255,7 @@ class FasterWhisper:
         )
 
         return " ".join([s.text.strip() for s in segments])
+
+    def unload(self) -> None:
+        self.model = None
+        torch.cuda.empty_cache()

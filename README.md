@@ -1,25 +1,6 @@
 # Spark-TTS Scripts
 Some mildly interesting [Spark-TTS](https://github.com/SparkAudio/Spark-TTS) scripts using python bindings for [llama.cpp](https://github.com/ggml-org/llama.cpp).
 
-## FAQ
-**Q**: How fast?  
-**A**: Around a second of delay from mic to playback on a 3060 with the `q4_k` quant.
-
-**Q**: Can I run it on RPI4B/Nokia 3310?  
-**A**: No, but you can walk it. Very slowly.
-
-**Q**: This is not SOTA as of `<current date>`. Why even bother?  
-**A**: At least it's not another implementation of Sesame's rug pull.
-
-**Q**: [FastAPI](https://github.com/fastapi/fastapi) server for general use?  
-**A**: Yes, I'll ask DeepSeek to code it when I have the time.
-
-**Q**: Why not [ExLlamaV2](https://github.com/turboderp-org/exllamav2)?  
-**A**: I had issues quantizing the model and it was only generating nonsense.
-
-**Q**: Why not [whisper.cpp](https://github.com/ggerganov/whisper.cpp)?  
-**A**: I can't get any of the python bindings to work with CUDA.
-
 ## Installation
 Clone the repo:
 ```sh
@@ -31,7 +12,7 @@ Create a venv:
 ```sh
 python -m venv spark
 spark\scripts\activate # windows
-. spark/bin/activate # linux
+source spark/bin/activate # linux
 ```
 
 Install torch:
