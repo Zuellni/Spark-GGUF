@@ -11,7 +11,7 @@ import huggingface_hub as hf
 import numpy as np
 import torch
 import torchaudio
-import torchaudio.functional as F
+import torchaudio.functional as tf
 import transformers
 from llama_cpp import Llama
 from omegaconf import OmegaConf
@@ -30,6 +30,7 @@ class Codec:
         wav2vec2: str = "annuvin/wav2vec2",
         device: str = "cuda",
         dtype: Literal["float16", "float32"] = "float16",
+        flash_attn: bool = True,
     ) -> None:
         if not Path(codec).is_dir():
             codec = hf.snapshot_download(codec)
@@ -44,7 +45,11 @@ class Codec:
             self.model = BiCodec.load_from_checkpoint(codec).to(device, self.dtype)
 
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained(wav2vec2)
-        self.extractor = Wav2Vec2Model.from_pretrained(wav2vec2, torch_dtype=self.dtype)
+        self.extractor = Wav2Vec2Model.from_pretrained(
+            pretrained_model_name_or_path=wav2vec2,
+            attn_implementation="flash_attention_2" if flash_attn else "sdpa",
+            torch_dtype=self.dtype,
+        )
         self.extractor.config.output_hidden_states = True
         self.extractor.to(device)
 
@@ -61,7 +66,7 @@ class Codec:
             audio = torch.mean(audio, dim=0, keepdim=True)
 
         if sample_rate != self.sample_rate:
-            audio = F.resample(audio, sample_rate, self.sample_rate)
+            audio = tf.resample(audio, sample_rate, self.sample_rate)
 
         return audio[:, :max_len]
 
@@ -126,8 +131,6 @@ class Spark:
                 verbose=False,
             )
 
-            self.context = context
-
     def encode(self, text: str, bos: bool = False, special: bool = False) -> list[int]:
         return self.model.tokenize(text.encode(), bos, special)
 
@@ -163,7 +166,7 @@ class Spark:
         )
 
         tokens = self.encode(text, special=True)
-        max_tokens = self.context - len(tokens)
+        max_tokens = max(0, self.model.n_ctx() - len(tokens))
         tokens_list = []
 
         for token in self.model.generate(
@@ -189,6 +192,7 @@ class Whisper:
         model: str = "openai/whisper-large-v3-turbo",
         device: str = "cuda",
         dtype: str = "float16",
+        flash_attn: bool = True,
         language: str = "en",
         task: Literal["transcribe", "translate"] = "transcribe",
         beams: int = 5,
@@ -198,6 +202,9 @@ class Whisper:
             model=model,
             device=device,
             torch_dtype=getattr(torch, dtype),
+            model_kwargs={
+                "attn_implementation": "flash_attention_2" if flash_attn else "sdpa"
+            },
         )
 
         self.language = language
