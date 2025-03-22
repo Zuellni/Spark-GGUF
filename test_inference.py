@@ -3,8 +3,8 @@ import soundfile as sf
 from classes import Bicodec, Spark
 from utils import Timer
 
-input = "path_to_speaker.wav"
-output = "output.wav"
+input = "../../voices/marie.wav"
+output = "spark.wav"
 text = (
     "She sells seashells by the seashore. "
     "The shells she sells are seashells, I'm sure. "
@@ -12,10 +12,10 @@ text = (
 )
 
 with Timer("Loaded bicodec"):
-    bicodec = Bicodec()
+    bicodec = Bicodec("../models/bicodec", "../models/wav2vec2")
 
 with Timer("Loaded spark"):
-    spark = Spark()
+    spark = Spark("../models/spark/model.q8_0.gguf")
 
 with Timer("Encoded audio"):
     tokens, codes = bicodec.encode(input)
@@ -26,5 +26,5 @@ with Timer("Generated audio"):
 with Timer("Decoded audio"):
     audio = bicodec.decode(tokens, codes)
 
-sf.write("test.wav", audio, bicodec.sample_rate)
+sf.write(output, audio, bicodec.sample_rate)
 spark.unload()

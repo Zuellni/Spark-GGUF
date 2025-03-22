@@ -147,7 +147,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with Timer("Loaded bicodec"):
-        bicodec = Bicodec(args.bicodec, args.wav2vec2)
+        bicodec = Bicodec(args.bicodec, args.wav2vec2, dtype="float16")
 
     with Timer("Loaded spark"):
         spark = Spark(args.spark)

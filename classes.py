@@ -25,7 +25,7 @@ class Bicodec:
         bicodec: str | Path = "annuvin/bicodec",
         wav2vec2: str | Path = "annuvin/wav2vec2-st",
         device: str = "cuda",
-        dtype: str = "float16",
+        dtype: Literal["float16", "float32"] = "float32",
         flash_attn: bool = True,
     ) -> None:
         if not (bicodec := Path(bicodec)).is_dir():
@@ -42,9 +42,7 @@ class Bicodec:
         self.extractor = Wav2Vec2Model.from_pretrained(
             pretrained_model_name_or_path=wav2vec2,
             attn_implementation=(
-                "flash_attention_2"
-                if flash_attn and dtype in ["bfloat16", "float16"]
-                else "sdpa"
+                "flash_attention_2" if flash_attn and dtype == "float16" else "sdpa"
             ),
             torch_dtype=self.dtype,
         )
