@@ -6,7 +6,7 @@ import numpy as np
 import sounddevice as sd
 import torch
 
-from models import Bicodec, Spark, Whisper
+from classes import Bicodec, Spark, Whisper
 from utils import Logger, Timer
 
 

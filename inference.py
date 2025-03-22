@@ -1,6 +1,6 @@
 import soundfile as sf
 
-from models import Bicodec, Spark
+from classes import Bicodec, Spark
 from utils import Timer
 
 input = "path_to_speaker.wav"
