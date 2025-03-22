@@ -21,10 +21,10 @@ with Timer("Encoded audio"):
     tokens, codes = bicodec.encode(input)
 
 with Timer("Generated audio"):
-    outputs = spark.generate(text, codes)
+    codes = spark.generate(text, codes)
 
 with Timer("Decoded audio"):
-    audio = bicodec.decode(tokens, outputs)
+    audio = bicodec.decode(tokens, codes)
 
 sf.write("test.wav", audio, bicodec.sample_rate)
 spark.unload()
