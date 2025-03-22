@@ -16,14 +16,14 @@ from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Model
 transformers.logging.set_verbosity_error()
 
 sys.path.append(str(Path(__file__).parent / "spark_tts"))
-from sparktts.models.bicodec import BiCodec
+from spark_tts.sparktts.models.bicodec import BiCodec
 
 
 class Bicodec:
     def __init__(
         self,
-        bicodec: Path | str = "annuvin/bicodec",
-        wav2vec2: Path | str = "annuvin/wav2vec2-st",
+        bicodec: str | Path = "annuvin/bicodec",
+        wav2vec2: str | Path = "annuvin/wav2vec2-st",
         device: str = "cuda",
         dtype: str = "float16",
         flash_attn: bool = True,
@@ -56,7 +56,7 @@ class Bicodec:
         self.sample_rate = self.config.audio_tokenizer.mel_params.sample_rate
         self.pattern = re.compile(r"<\|bicodec_semantic_(\d+)\|>")
 
-    def load(self, path: Path | str, max_len: int | None = None) -> torch.Tensor:
+    def load(self, path: str | Path, max_len: int | None = None) -> torch.Tensor:
         audio, sample_rate = torchaudio.load(path)
         audio = audio.to(self.device, self.dtype)
 
@@ -110,20 +110,18 @@ class Bicodec:
 class Spark:
     def __init__(
         self,
-        path: Path | str = "annuvin/spark-gguf",
-        file: str = "model.q8_0.gguf",
+        path: str | Path = "annuvin/spark-gguf",
+        model: str = "model.q8_0.gguf",
         context: int = 4096,
         flash_attn: bool = True,
     ) -> None:
         if not (path := Path(path)).is_file():
-            path = Path(hf.hf_hub_download(path.as_posix(), file))
+            path = Path(hf.hf_hub_download(path.as_posix(), model))
 
         self.model = Llama(
             model_path=str(path),
             n_gpu_layers=-1,
             n_ctx=context,
-            n_batch=context,
-            n_ubatch=context,
             flash_attn=flash_attn,
             verbose=False,
         )
@@ -157,7 +155,8 @@ class Spark:
         )
 
         inputs = self.encode(inputs, special=True)
-        max_tokens = max(0, self.model.n_ctx() - len(inputs))
+        max_tokens = self.model.n_ctx() - len(inputs)
+        assert max_tokens > 0, "input too long, increase context"
         outputs = []
 
         for token in self.model.generate(
@@ -188,7 +187,7 @@ class Spark:
 class Whisper:
     def __init__(
         self,
-        model: str = "openai/whisper-large-v3-turbo",
+        path: str | Path = "openai/whisper-large-v3-turbo",
         device: str = "cuda",
         dtype: str = "float16",
         flash_attn: bool = True,
@@ -198,7 +197,7 @@ class Whisper:
     ) -> None:
         self.model = transformers.pipeline(
             task="automatic-speech-recognition",
-            model=model,
+            model=Path(path).as_posix(),
             device=device,
             torch_dtype=getattr(torch, dtype),
             model_kwargs={
@@ -232,7 +231,7 @@ class Whisper:
 class FasterWhisper:
     def __init__(
         self,
-        model: str = "turbo",
+        path: str | Path = "turbo",
         device: str = "cuda",
         dtype: str = "float16",
         language: str = "en",
@@ -241,7 +240,7 @@ class FasterWhisper:
     ) -> None:
         from faster_whisper import WhisperModel
 
-        self.model = WhisperModel(model, device, compute_type=dtype)
+        self.model = WhisperModel(Path(path).as_posix(), device, compute_type=dtype)
         self.language = language
         self.task = task
         self.beams = beams
