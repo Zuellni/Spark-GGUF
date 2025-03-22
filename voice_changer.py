@@ -31,7 +31,7 @@ class Application:
         spark: Spark,
         whisper: Whisper,
         tokens: torch.Tensor,
-        tokens_str: str,
+        codes: str,
         block_duration: int = 30,
         detection_threshold: float = 0.01,
         silence_threshold: int = 8,
@@ -45,7 +45,7 @@ class Application:
         self.whisper = whisper
 
         self.tokens = tokens
-        self.tokens_str = tokens_str
+        self.codes = codes
 
         self.block_duration = block_duration
         self.block_size = int(bicodec.sample_rate * block_duration / 1000)
@@ -109,13 +109,13 @@ class Application:
 
                 with Timer() as timer:
                     try:
-                        tokens_str = spark.generate(text, self.tokens_str)
+                        codes = spark.generate(text, self.codes)
                     except:
                         Logger.error("Generation error")
                         continue
 
                     try:
-                        data = bicodec.decode(self.tokens, tokens_str)
+                        data = bicodec.decode(self.tokens, codes)
                     except:
                         Logger.error("Decoding error")
                         continue
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         whisper = Whisper(args.whisper)
 
     with Timer("Encoded audio"):
-        tokens, tokens_str = bicodec.encode(args.audio)
+        tokens, codes = bicodec.encode(args.audio)
 
     application = Application(
         input=args.input,
@@ -165,7 +165,7 @@ if __name__ == "__main__":
         spark=spark,
         whisper=whisper,
         tokens=tokens,
-        tokens_str=tokens_str,
+        codes=codes,
     )
 
     try:
