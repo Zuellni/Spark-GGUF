@@ -3,8 +3,8 @@ import soundfile as sf
 from classes import Bicodec, Spark
 from utils import Timer
 
-input = "../../voices/marie.wav"
-output = "spark.wav"
+input = "../../voices/sonic.wav"
+output = "output.wav"
 text = (
     "She sells seashells by the seashore. "
     "The shells she sells are seashells, I'm sure. "

@@ -22,8 +22,8 @@ from spark_tts.sparktts.models.bicodec import BiCodec
 class Bicodec:
     def __init__(
         self,
-        bicodec: str | Path = "annuvin/bicodec",
-        wav2vec2: str | Path = "annuvin/wav2vec2-st",
+        bicodec: str | Path = "zuellni/bicodec",
+        wav2vec2: str | Path = "zuellni/wav2vec2-st",
         device: str = "cuda",
         dtype: Literal["float16", "float32"] = "float32",
         flash_attn: bool = True,
@@ -108,7 +108,7 @@ class Bicodec:
 class Spark:
     def __init__(
         self,
-        path: str | Path = "annuvin/spark-gguf",
+        path: str | Path = "zuellni/spark-gguf",
         model: str = "model.q8_0.gguf",
         context: int = 4096,
         flash_attn: bool = True,

@@ -140,9 +140,9 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--audio", required=True, help="audio file")
     parser.add_argument("-i", "--input", type=int, choices=ic, required=True, help=ih)
     parser.add_argument("-o", "--output", type=int, choices=oc, required=True, help=oh)
-    parser.add_argument("-b", "--bicodec", default="annuvin/bicodec")
-    parser.add_argument("-s", "--spark", default="annuvin/spark-gguf")
-    parser.add_argument("-v", "--wav2vec2", default="annuvin/wav2vec2-st")
+    parser.add_argument("-b", "--bicodec", default="zuellni/bicodec")
+    parser.add_argument("-s", "--spark", default="zuellni/spark-gguf")
+    parser.add_argument("-v", "--wav2vec2", default="zuellni/wav2vec2-st")
     parser.add_argument("-w", "--whisper", default="openai/whisper-large-v3-turbo")
     args = parser.parse_args()
 
